@@ -1,0 +1,86 @@
+version: "3.9"
+
+services:
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - gateway
+    networks:
+      - app-network
+
+  gateway:
+    build: ./gateway
+    expose:
+      - "8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - USER_SERVICE_URL=http://user-service:8001
+      - ORDER_SERVICE_URL=http://order-service:8002
+    depends_on:
+      - user-service
+      - order-service
+    networks:
+      - app-network
+
+  user-service:
+    build: ./users
+    expose:
+      - "8001"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/users_db
+      - MINIO_URL=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+    depends_on:
+      - db
+      - minio
+    networks:
+      - app-network
+
+  order-service:
+    build: ./orders
+    expose:
+      - "8002"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/orders_db
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_MULTIPLE_DATABASES=users_db,orders_db
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9001:9001"
+    expose:
+      - "9000"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  db-data:
+  minio-data:
